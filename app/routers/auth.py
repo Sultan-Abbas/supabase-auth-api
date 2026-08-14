@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.encoders import jsonable_encoder
-from gotrue.errors import AuthApiError
+from supabase_auth.errors import AuthApiError
 
 from app.schemas import Credentials, ErrorResponse, LoginResponse, SignupResponse
 from app.supabase_client import supabase
