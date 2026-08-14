@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.routers import auth
+from app.routers import auth, protected, public
 from app.supabase_client import supabase
 
 
@@ -46,6 +46,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(auth.router)
+app.include_router(public.router)
+app.include_router(protected.router)
 
 
 @app.get("/", tags=["meta"])
