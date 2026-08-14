@@ -1,9 +1,10 @@
 """Authentication routes backed by Supabase Auth."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.encoders import jsonable_encoder
-from supabase_auth.errors import AuthApiError
+from supabase_auth.errors import AuthApiError, AuthError
 
+from app.dependencies import AuthContext, require_auth
 from app.schemas import Credentials, ErrorResponse, LoginResponse, SignupResponse
 from app.supabase_client import supabase
 
@@ -80,3 +81,23 @@ def login(body: Credentials):
         "expires_at": session.expires_at,
         "user": jsonable_encoder(result.user),
     }
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={401: {"model": ErrorResponse}},
+    summary="Revoke the caller's session (protected)",
+)
+def logout(auth: AuthContext = Depends(require_auth)):
+    # This server keeps no session of its own, so `auth.sign_out()` would have
+    # nothing to revoke. `admin.sign_out(jwt)` is the documented way to revoke
+    # the refresh tokens belonging to the token the caller presented.
+    try:
+        supabase.auth.admin.sign_out(auth.token, "global")
+    except AuthError:
+        # The guard already proved the token was valid; a session that is
+        # already gone still leaves the caller logged out, which is the point.
+        pass
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
