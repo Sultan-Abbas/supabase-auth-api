@@ -7,10 +7,20 @@ after the token has been verified.
 
 from typing import Any, NamedTuple, Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase_auth.errors import AuthError, AuthRetryableError
 
 from app.supabase_client import supabase
+
+# Declaring the scheme is what puts the padlock and the "Authorize" button in
+# Swagger UI. auto_error=False keeps our own 401 body instead of FastAPI's
+# {"detail": "Not authenticated"}.
+bearer_scheme = HTTPBearer(
+    bearerFormat="JWT",
+    auto_error=False,
+    description="Paste the access_token returned by POST /auth/login.",
+)
 
 
 class AuthContext(NamedTuple):
@@ -18,27 +28,6 @@ class AuthContext(NamedTuple):
 
     token: str
     user: Any
-
-
-def extract_bearer_token(authorization: Optional[str]) -> str:
-    """Pull the token out of `Authorization: Bearer <token>`.
-
-    Raises 401 when the header is absent, is not the Bearer scheme, or carries
-    an empty token. The scheme match is case-insensitive because RFC 7235 says
-    scheme names are, and real clients send "bearer" as often as "Bearer".
-    """
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Access token required"
-        )
-
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Access token required"
-        )
-
-    return token.strip()
 
 
 def verify_token(token: str):
@@ -66,9 +55,21 @@ def verify_token(token: str):
     return result.user
 
 
-def require_auth(authorization: Optional[str] = Header(default=None)) -> AuthContext:
-    """The guard itself: `Depends(require_auth)` protects a route."""
-    token = extract_bearer_token(authorization)
+def require_auth(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> AuthContext:
+    """The guard itself: `Depends(require_auth)` protects a route.
+
+    HTTPBearer does the header parsing: a missing header, a non-Bearer scheme
+    or an empty token all arrive here as None (it matches the scheme name
+    case-insensitively, as RFC 7235 requires).
+    """
+    if credentials is None or not credentials.credentials.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Access token required"
+        )
+
+    token = credentials.credentials.strip()
     user = verify_token(token)
     return AuthContext(token=token, user=user)
 
